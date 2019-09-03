@@ -1,5 +1,5 @@
 # coding:utf-8
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, SoupStrainer
 import requests
 import time
 
@@ -7,12 +7,17 @@ import abc
 import typing
 import traceback
 
+# from Carson3.Class.Logging import CLogging
+from Logging import CLogging
+
 
 class _SpiderBase(abc.ABC):
     def __init__(self, log_name):
         __slot__ = ['session', 'log', 'headers', '_work_list']
         self.session = requests.session()
-        self.log = open(f'{log_name}.txt', 'w', encoding='utf-8')
+        # self.log = open(f'{log_name}.txt', 'w', encoding='utf-8')  # If you use this method and you do not use "with" or "close" (guarantee that "close" will be executed) that will lose all the data when the program crashes.
+        self._log = CLogging("logger_name", f'{log_name}.txt')
+        self.log = self._log.info
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:39.0) Gecko/20100101 Firefox/39.0',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -44,7 +49,7 @@ class _SpiderBase(abc.ABC):
                 except Exception as e:
                     print(traceback.format_exc())
                     print(str(e))
-        self.log.close()
+        self._log.close()
 
     @abc.abstractmethod
     def spider(self, page, name) -> list:
@@ -154,7 +159,7 @@ class Job_51(_SpiderBase):
             self.log.write(i.find('td', attrs={'class': 'td2'}).find('a').get_text().replace('\n', ' ') + '  ')
             self.log.write(i.find('td', attrs={'class': 'td3'}).get_text() + '\n\n')
 
-    def spider(self, name, page):
+    def spider(self, page, name):
         lists = []
         html = requests.get(
             f'http://search.51job.com/list/030800,0308{name},0000,00,9,99,%25CD%25E2%25C3%25B3,1,1.html?lang=c&stype=1&postchannel=0000&workyear=99&cotype=99&degreefrom=99&jobterm=01&companysize=99&lonlat=0%2C0&radius=-1&ord_field=0&list_type=0&confirmdate=9&fromType=17',
@@ -163,6 +168,57 @@ class Job_51(_SpiderBase):
         table = soup.find('table', attrs={'id': 'resultList'})
         if table:
             lists = table.find_all('tr', attrs={'class': 'tr0'})
+        return lists
+
+
+class TAAA(_SpiderBase):  # TAIPEI ASSOCIATION OF ADVERTISING AGENCIES
+    """
+        function crate date: 2019/09/03
+    """
+    def __init__(self, log_name='TAAA'):
+        super().__init__(log_name)
+
+    def write(self, lists):
+        if len(lists) > 0:
+            self.log('\t'.join(lists))  # output extension: csv, sep="\t"
+
+    def spider(self, page, name) -> list:
+        lists = []
+        url = f'http://www.taaa.org.tw/company/{page}'
+        server_response = requests.get(url, headers=self.headers)
+        if server_response.status_code != 200:
+            print(f'error to connect:{url}')
+            return []
+
+        filter_data = SoupStrainer('div', attrs={'class': ['sider-info']})
+        parsed_slide_info = BeautifulSoup(server_response.text, 'lxml', parse_only=filter_data)
+        if parsed_slide_info is None:
+            return []
+
+        contact_info = parsed_slide_info.find('div', attrs={'class': ['info']})
+        # contact_info.find('p', string=self.query_list[idx]).find_next_siblings()
+        if contact_info is None:
+            print(f'parse error. msg: no slide info. url: {url}')
+            return []
+
+        p_datas = contact_info.findAll('p')  # contact_info.find('p').find_next_siblings()
+        dict_record = dict(add="", tel="", fax="", email="", site="")
+        for p in p_datas:
+            key_name = p.attrs['class'][0]
+            if key_name in dict_record:
+                text = p.text
+                for ignore_text in ('電話：', '傳真：', 'E-mail：', '網站：'):
+                    if text.find(ignore_text) != -1:
+                        text = text.replace(ignore_text, "")
+                        break  # There can be only one
+                dict_record[key_name] = text
+        contact_info_list = [e for e in dict_record.values()]
+
+        filter_data = SoupStrainer('h3', attrs={'class': ['page-title']})
+        parsed_company_name = BeautifulSoup(server_response.text, 'lxml', parse_only=filter_data)
+        company_name = parsed_company_name.text if parsed_company_name else ""
+        lists = [url, company_name]
+        lists.extend(contact_info_list)
         return lists
 
 
@@ -185,12 +241,15 @@ class Job_get():
                                    ]
         self.job_cn_work_list = [(None, 1,), (None, 2)]
 
+        self.taaa_work_list = [(None, 194)]
+
     def run(self):
-        for point_object, work_list in [(Ganji, self.ganji_work_list),
-                                        (Job_51, self.job_51_work_list),
-                                        (Job_58, self.job_58_work_list),
-                                        (Job_5156, self.job_5156_work_list),
-                                        (Job_cn, self.job_cn_work_list),
+        for point_object, work_list in [(TAAA, self.taaa_work_list),
+                                        # (Ganji, self.ganji_work_list),
+                                        # (Job_51, self.job_51_work_list),
+                                        # (Job_58, self.job_58_work_list),
+                                        # (Job_5156, self.job_5156_work_list),
+                                        # (Job_cn, self.job_cn_work_list),
                                         ]:
             obj = point_object()
             obj.set_work_list(work_list)
