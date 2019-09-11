@@ -7,8 +7,7 @@ import abc
 import typing
 import traceback
 
-# from Carson3.Class.Logging import CLogging
-from Logging import CLogging
+from Carson.Class.Logging import CLogging  # pip install carson-logging
 
 
 class _SpiderBase(abc.ABC):
@@ -180,7 +179,7 @@ class TAAA(_SpiderBase):  # TAIPEI ASSOCIATION OF ADVERTISING AGENCIES
 
     def write(self, lists):
         if len(lists) > 0:
-            self.log('\t'.join(lists))  # output extension: csv, sep="\t"
+            self.log('\t'.join(lists).replace('\r\n', ' '))  # output extension: csv, sep="\t"
 
     def spider(self, page, name) -> list:
         lists = []
@@ -241,20 +240,20 @@ class Job_get():
                                    ]
         self.job_cn_work_list = [(None, 1,), (None, 2)]
 
-        self.taaa_work_list = [(None, 194)]
+        self.taaa_work_list = [(None, 301)]
 
     def run(self):
-        for point_object, work_list in [(TAAA, self.taaa_work_list),
+        for pointer_object, work_list in [(TAAA, self.taaa_work_list),
                                         # (Ganji, self.ganji_work_list),
                                         # (Job_51, self.job_51_work_list),
                                         # (Job_58, self.job_58_work_list),
                                         # (Job_5156, self.job_5156_work_list),
                                         # (Job_cn, self.job_cn_work_list),
                                         ]:
-            obj = point_object()
+            obj = pointer_object()
             obj.set_work_list(work_list)
             obj.run()
-            print(f'{point_object.__name__} OK')
+            print(f'{pointer_object.__name__} OK')
 
 
 if __name__ == '__main__':
