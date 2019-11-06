@@ -28,7 +28,7 @@ from common.Crawler import _CrawlerInterface, _SeleniumRunner
 from Carson.Class.Logging import CLogging  # pip install carson-logging
 
 
-BACKGROUND_MODE = False
+BACKGROUND_MODE = True
 
 
 class RentHouse591URL(_SeleniumRunner):
@@ -48,11 +48,11 @@ class RentHouse591URL(_SeleniumRunner):
         dict_search = {tag_city.text: tag_city for tag_city in tag_city_list}
         return dict_search.get(city_name)
 
-    def start(self, city_tuple: tuple):
+    def start(self, city_list: list):
         area_box_close = self.web.find_element_by_id('area-box-close')
         area_box_close.click()
 
-        for cur_city_name in city_tuple:
+        for cur_city_name in city_list:
             t_s = time()
             n_data_count = 0
             next_city_flag: bool = True
@@ -94,7 +94,7 @@ class RentHouse591URL(_SeleniumRunner):
                     break
 
 
-class RenHouse591Info(_CrawlerInterface):
+class RentHouse591Info(_CrawlerInterface):
     __slots__ = ['_url', ]
 
     OUT_DIR = 'output/url_data'
@@ -106,13 +106,13 @@ class RenHouse591Info(_CrawlerInterface):
                      state='現況',  # div class="detailInfo clearfix" -> find ul class="attr" -> find_elements('li')[4]
                      gender='性別')
 
-    """
-    '男' if provider_name in ('先生', '帥哥') else 
-        '女' if provider_name in ('小姐', '女士', '美女') else '用ML從照片判別姓別'
-    """
-
     async def get_response(self, *args) -> list:
         pass
+
+    @staticmethod
+    def get_gender_by_name(name):
+        return '男' if name in ('先生', '帥哥') else \
+            '女' if name in ('小姐', '女士', '美女') else 'get it from the picture with machine learning'
 
     def parser_html(self, *args):
         pass
@@ -124,36 +124,17 @@ class RenHouse591Info(_CrawlerInterface):
         pass
 
 
-def main(args):
-    parser = RentHouse591URL(Path('temp.temp'))
-    parser.start(args.city_name_tuple)
+def main(config):
+    dict_run = {0: lambda: RentHouse591URL(Path('temp.temp')).start(config['RentHouse591URL']['city_name_list'])}
+
+    func = dict_run.get(config['Action'])
+    if func:
+        func()
 
 
 if __name__ == '__main__':
-    from argparse import ArgumentParser, RawTextHelpFormatter
-    from configparser import ConfigParser, ExtendedInterpolation
+    from yaml import safe_load  # pip install pyyaml
 
-    config = ConfigParser(interpolation=ExtendedInterpolation())  # ConfigParser will see all the variable its type as "str"
-    read_config_result = config.read(['config.ini', ], encoding='utf-8')
-
-    obj_ini = InIGetter(Path('config.ini'))
-    arg_parser = ArgumentParser(usage="", formatter_class=RawTextHelpFormatter)
-
-    arg_parser.add_argument("city_name_tuple", help=f'such as: ("新北市", "台北市")', nargs='?', default=obj_ini.get('city_name_tuple'))
-    g_args = arg_parser.parse_args()
-
-    if 'CHECK POSITIONAL ARGUMENTS':
-        for attr_name, value in vars(g_args).items():
-            if attr_name.startswith('-') or value is not None:  # Required Value must not None.
-                continue
-            print(f'error required values of {highlight_print(attr_name, print_flag=False)} is None')
-            exit(-1)
-
-    if 'ENSURE TYPE':
-        g_args.city_name_tuple = eval(g_args.city_name_tuple)
-
-    if highlight_print('INPUT PARAMETER'):  # Show input parameter let use knows.
-        print(f"{'key':<20} {'value':<40}")
-        for _key, _value in vars(g_args).items():
-            print(f"{_key:<20} {str(_value) if _value is not None else '':<40}")
-    main(g_args)
+    with open('config.yaml', 'r', encoding='utf-8') as f:
+        g_config = safe_load(f)  # reading configuration files is very dangerous because they can allow execution of arbitrary code.
+    main(g_config)
