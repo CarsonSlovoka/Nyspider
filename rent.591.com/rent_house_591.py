@@ -11,13 +11,14 @@ from pathlib import Path
 from sys import executable
 
 import abc
+from time import sleep
 
 from bs4 import BeautifulSoup, SoupStrainer
 
 from selenium import webdriver
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.remote.webelement import WebElement
-from selenium.common.exceptions import NoSuchElementException, UnexpectedAlertPresentException
+from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 
 
 from compat import *
@@ -116,12 +117,24 @@ class RentHouse591(WebParser):
                 for cur_a in result_set_a:
                     self.write([cur_city_name, cur_a.attrs.get('href', "")])
 
-                try:
-                    tag_next = self.web.find_element_by_class_name('pageNext')  # pageNext last
-                    webdriver.ActionChains(self.web).move_to_element(tag_next).click(tag_next).perform()
-                except NoSuchElementException:
+                next_city_flag = False
+                while 1:
+                    try:
+                        tag_next = self.web.find_element_by_class_name('pageNext')  # pageNext last
+                        webdriver.ActionChains(self.web).move_to_element(tag_next).click(tag_next).perform()
+                        break
+                    except NoSuchElementException:
+                        print(f'{cur_city_name:<10} cost time:{green_text(str(time() - t_s))}')
+                        next_city_flag = True  # next city
+                        break
+                    except StaleElementReferenceException:
+                        highlight_print('StaleElementReferenceException')
+                        sleep(3)
+                        self.web.refresh()
+                        continue
+                if next_city_flag:
                     print(f'{cur_city_name:<10} cost time:{green_text(str(time() - t_s))}')
-                    break  # next city
+                    break
 
 
 def main():
