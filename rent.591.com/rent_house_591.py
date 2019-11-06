@@ -137,10 +137,36 @@ class RentHouse591(WebParser):
                     break
 
 
-def main():
+def main(args):
     parser = RentHouse591(Path('temp.temp'))
     parser.start(('新北市', '台北市', ))
 
 
 if __name__ == '__main__':
-    main()
+    from argparse import ArgumentParser, RawTextHelpFormatter
+    from configparser import ConfigParser, ExtendedInterpolation
+
+    config = ConfigParser(interpolation=ExtendedInterpolation())  # ConfigParser will see all the variable its type as "str"
+    read_config_result = config.read(['config.ini', ], encoding='utf-8')
+
+    obj_ini = InIGetter(Path('config.ini'))
+    arg_parser = ArgumentParser(usage="", formatter_class=RawTextHelpFormatter)
+
+    arg_parser.add_argument("city_name_list", help=f'such as: ["新北市", "台北市"]', nargs='?', default=obj_ini.get('city_name_list'))
+    g_args = arg_parser.parse_args()
+
+    if 'CHECK POSITIONAL ARGUMENTS':
+        for attr_name, value in vars(g_args).items():
+            if attr_name.startswith('-') or value is not None:  # Required Value must not None.
+                continue
+            print(f'error required values of {highlight_print(attr_name, print_flag=False)} is None')
+            exit(-1)
+
+    if 'ENSURE TYPE':
+        g_args.city_name_list = eval(g_args.city_name_list)
+
+    if highlight_print('INPUT PARAMETER'):  # Show input parameter let use knows.
+        print(f"{'key':<20} {'value':<40}")
+        for _key, _value in vars(g_args).items():
+            print(f"{_key:<20} {str(_value) if _value is not None else '':<40}")
+    main(g_args)
