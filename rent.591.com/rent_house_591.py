@@ -123,29 +123,9 @@ class RentHouse591(WebParser):
                     print(f'{cur_city_name:<10} cost time:{green_text(str(time() - t_s))}')
                     break  # next city
 
-            """
-            while 1:
-                try:  # selenium.common.exceptions.StaleElementReferenceException: Message: stale element reference: element is not attached to the page document
-                    tag_content = self.web.find_element_by_id('content')
-                    
-                    tag_li_list = tag_content.find_elements_by_tag_name('ul')
-                    for tag_li in tag_li_list:
-                        tag_h3 = tag_li.find_element_by_tag_name('h3')
-                        tag_a = tag_h3.find_element_by_tag_name('a')
-                        url = tag_a.get_attribute('href')
-                        batch_msg_list.append([city_name, url])
-                    break
-                except:
-                    import traceback
-                    print(traceback.format_exc())
-                    self.web.refresh()
-            [self.write(msg_list) for msg_list in batch_msg_list]
-            """
-
 
 def main():
     parser = RentHouse591(Path('temp.temp'))
-    # parser.search()
     parser.start(('新北市', '台北市', ))
 
 
