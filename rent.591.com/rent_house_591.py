@@ -17,7 +17,6 @@ from selenium.webdriver.support.ui import Select
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 
-
 from compat import *
 from common.structured import *
 from common.Crawler import SpiderBase, SeleniumRunner
@@ -39,7 +38,7 @@ class RentHouse591URL(SeleniumRunner):
 
     CSV_TITLE = ['city', 'URL', ]
 
-    def __init__(self, log_path):
+    def __init__(self, log_path: Path):
         super().__init__(Website.RENT_591, log_path, BACKGROUND_MODE)
         self.write(self.CSV_TITLE)  # csv title
 
@@ -103,11 +102,13 @@ class RentHouse591Info(SpiderBase):
     OUT_DIR = 'output/url_data'
 
     CSV_TITLE = dict(provider_name='出租者',  # <div class="infoOne clearfix" find <i
+                     gender='性別',
                      provider_type='出租者身份',  # <div class="infoOne clearfix" find <i .text
-                     phone='聯絡電話',  # <span class="num" -> <img src=... <--download and recognize
                      house_type='型態',  # <div class="detailInfo clearfix" -> find <ul class="attr" -> find_elements('li')[3]
-                     state='現況',       # <div class="detailInfo clearfix" -> find <ul class="attr" -> find_elements('li')[4]
-                     gender='性別')
+                     state='現況',  # <div class="detailInfo clearfix" -> find <ul class="attr" -> find_elements('li')[4]
+                     phone='聯絡電話',  # <span class="num" -> <img src=... <--download and recognize
+                     URL='URL',
+                     )
 
     def get_works_url_list(self, url_list: list) -> list:
         return [('https:' + url).replace(' ', '') for url in url_list]
@@ -208,6 +209,9 @@ class RentHouse591Info(SpiderBase):
         if not work_dir.exists():
             raise FileNotFoundError(str(work_dir.resolve()))
 
+        with open(output_file, 'w') as _f:
+            _f.write('\t'.join([title_name for title_name in RentHouse591Info.CSV_TITLE]))
+
         for cur_url_file in [url_file for url_file in work_dir.glob('*.csv') if url_file.is_file()]:
             csv_file = CSVFile(cur_url_file.resolve(),
                                usecols=range(len(RentHouse591URL.CSV_TITLE)))  # ignore the row data, it columns are not matched with title
@@ -220,7 +224,7 @@ class RentHouse591Info(SpiderBase):
             pool.close()
             pool.join()
             highlight_print(f'{((time() - t_s) / 60):<8.2f} min')
-        startfile(work_dir)
+        startfile(output_file.parent)
 
 
 def main(config):
