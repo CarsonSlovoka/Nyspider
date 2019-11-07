@@ -1,7 +1,8 @@
 import aiohttp
 import asyncio
 
-from multiprocessing import Lock
+from multiprocessing import Pool, Lock
+from typing import Iterator, Optional, Tuple, List
 
 import abc
 import traceback
@@ -19,8 +20,10 @@ from exceptions import WriteDataFailed
 from selenium.webdriver.remote.webelement import WebElement
 from selenium import webdriver
 
+g_LOCK = None
 
-class _CrawlerInterface(abc.ABC):
+
+class CrawlerInterface(abc.ABC):
     __slots__ = []
 
     @abc.abstractmethod
@@ -40,7 +43,7 @@ class _CrawlerInterface(abc.ABC):
         pass
 
 
-class _SpiderBase(_CrawlerInterface):
+class SpiderBase(CrawlerInterface):
     __slots__ = ['_log', 'log', '_lock', '_timeout']
 
     def __init__(self, log_path: Path, lock_log: Lock = None, timeout: int = None):
@@ -117,7 +120,7 @@ class _SpiderBase(_CrawlerInterface):
             return False
 
 
-class _SeleniumRunner(abc.ABC):
+class SeleniumRunner(abc.ABC):
     __slots__ = ['_web', '_log', ]
 
     def __init__(self, url: URL, log_path: Path = None, background_mode: bool = True):
@@ -150,3 +153,27 @@ class _SeleniumRunner(abc.ABC):
     @abc.abstractmethod
     def _search(self, *args):
         ...
+
+
+def initializer_pool(lock_obj):
+    global g_LOCK
+    g_LOCK = lock_obj  # global variable for pool
+
+
+def get_pool(n_cpu: int, work_list_size: int) -> Tuple[Pool, int]:
+    lock = Lock()
+    pool = Pool(processes=n_cpu, initializer=initializer_pool, initargs=(lock,))
+    step = int(work_list_size / n_cpu) + 1
+    return pool, step
+
+
+def create_spider_and_run(obj_class, output_path, *args, **kwds):
+    """
+    isinstance(obj_class, PyPIURLCrawler) *args: search_title, range(s_page, e_page)
+    isinstance(obj_class, PyPIProjectCrawler) *args: spider_url_list
+    """
+    global g_LOCK
+    with obj_class(log_path=output_path, lock_log=g_LOCK, timeout=kwds.get('timeout')) as crawler:
+        if not isinstance(crawler, SpiderBase):
+            return
+        crawler.run(*args, kwds.get('max_threads', 20))

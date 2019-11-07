@@ -1,6 +1,14 @@
-Action: 0
+Action: 1
 RentHouse591URL:
   city_name_list:
       - 新北市
       - 台北市
 RentHouse591Info:
+  # Required
+  work_dir: 'output/'
+  output_file: 'rent_591.info.csv'
+
+  # Options:
+  max_threads: 20  # each pool sends requests that maximum times per once
+  timeout: 30
+  n_cpu: -1  # -1 it means: count the numbers of CPU that your computer can provide maximize

@@ -6,14 +6,11 @@ prepared:
 USAGE::
 
 """
-from os import path, startfile
+from os import startfile, cpu_count
 from pathlib import Path
-from sys import executable
-
-import abc
 from time import sleep
 
-from bs4 import BeautifulSoup, SoupStrainer
+from bs4 import BeautifulSoup, SoupStrainer, Tag
 
 from selenium import webdriver
 from selenium.webdriver.support.ui import Select
@@ -23,15 +20,21 @@ from selenium.common.exceptions import NoSuchElementException, StaleElementRefer
 
 from compat import *
 from common.structured import *
-from common.Crawler import _CrawlerInterface, _SeleniumRunner
+from common.Crawler import SpiderBase, SeleniumRunner
+from common.Crawler import get_pool, create_spider_and_run
 
-from Carson.Class.Logging import CLogging  # pip install carson-logging
 
+from exceptions import WriteDataFailed
+
+import asyncio
+
+import re
+import traceback
 
 BACKGROUND_MODE = True
 
 
-class RentHouse591URL(_SeleniumRunner):
+class RentHouse591URL(SeleniumRunner):
     __slots__ = []
 
     CSV_TITLE = ['city', 'URL', ]
@@ -94,38 +97,136 @@ class RentHouse591URL(_SeleniumRunner):
                     break
 
 
-class RentHouse591Info(_CrawlerInterface):
+class RentHouse591Info(SpiderBase):
     __slots__ = ['_url', ]
 
     OUT_DIR = 'output/url_data'
 
-    CSV_TITLE = dict(provider_name='出租者',  # div class="infoOne clearfix" find i
-                     provider_type='出租者身份',  # div class="infoOne clearfix" find i .text
-                     phone='聯絡電話',  # span class="num" img=src <--download and recognize
-                     house_type='型態',  # div class="detailInfo clearfix" -> find ul class="attr" -> find_elements('li')[3]
-                     state='現況',  # div class="detailInfo clearfix" -> find ul class="attr" -> find_elements('li')[4]
+    CSV_TITLE = dict(provider_name='出租者',  # <div class="infoOne clearfix" find <i
+                     provider_type='出租者身份',  # <div class="infoOne clearfix" find <i .text
+                     phone='聯絡電話',  # <span class="num" -> <img src=... <--download and recognize
+                     house_type='型態',  # <div class="detailInfo clearfix" -> find <ul class="attr" -> find_elements('li')[3]
+                     state='現況',       # <div class="detailInfo clearfix" -> find <ul class="attr" -> find_elements('li')[4]
                      gender='性別')
 
-    async def get_response(self, *args) -> list:
-        pass
+    def get_works_url_list(self, url_list: list) -> list:
+        return [('https:' + url).replace(' ', '') for url in url_list]
 
     @staticmethod
     def get_gender_by_name(name):
-        return '男' if name in ('先生', '帥哥') else \
-            '女' if name in ('小姐', '女士', '美女') else 'get it from the picture with machine learning'
+        _name = name[-2:]
+        return '男' if _name in ('先生', '男士', '帥哥') else \
+            '女' if _name in ('小姐', '女士', '美女', '太太') else name  # 'get it from the picture with machine learning'
 
-    def parser_html(self, *args):
-        pass
+    def parser_html(self, url: URL, html_text: str):
 
-    def run(self, *args) -> None:
-        pass
+        def get_phone_data(tag_phone_span: Tag) -> str:
+            if len(tag_num_span.text) > 9:
+                return [' '.join(e) for e in [re.findall('\\b\\S*\\b', tag_phone_span.text)] if e != ''][0]
 
-    async def write(self, *args) -> bool:
-        pass
+            phone_img = tag_phone_span.find('img')
+            # machine_learning.predict(download_img(phone_img_url))
+            return phone_img.attrs.get('src')
+
+        def get_provider_type(t_provider_div: Tag):
+            provider_type_text = t_provider_div.text
+            _provider_type = re.search("（\\S*）", provider_type_text) if '（' in provider_type_text else \
+                re.search("(\\S*)", provider_type_text) if '(' in provider_type_text else None
+            if _provider_type is None:
+                highlight_print(f'error parser. {provider_type_text:20} not in "(, ("  url:{url}')
+                return ''
+            _provider_type = _provider_type.group()[:3]
+            return _provider_type.replace('（', '')
+
+        def get_detail(_tag_detail: Tag, output_dict: dict) -> None:
+            tag_ul_attr = _tag_detail.find('ul', attrs={'class': ["attr", ]})
+            result_set_li = tag_ul_attr.findAll('li')
+            for tag_li in result_set_li:
+                select_item_name = tag_li.text[0: 2]
+                if select_item_name not in ('型態', '現況'):
+                    continue
+                text = tag_li.text
+                text = text[text.find(':') + 1:].replace('  ', '')
+                dict_attr[select_item_name] = text
+
+        filter_data = SoupStrainer(['div', 'span'],
+                                   attrs={'class': ['avatarRight', 'detailInfo clearfix',  # div
+                                                    'num']}  # span
+                                   )
+        parser_data = BeautifulSoup(html_text, 'lxml', parse_only=filter_data)
+        if parser_data is None:
+            return []
+
+        tag_num_span = parser_data.find('span', attrs={'class': ['num', ]})
+        if tag_num_span is None:
+            highlight_print(f'error. empty phone number: url: {url} (maybe the page does not exists anymore.)')
+            return []
+        phone_img_url = get_phone_data(tag_num_span)
+
+        # result_set_provider = parser_data.findAll('div', attrs={'class': ['infoOne clearfix'], })
+        tag_avatar_right_div = parser_data.find('div', attrs={'class': ['avatarRight'], })
+        tag_provider_div = tag_avatar_right_div.find('div')
+
+        provider_name = tag_provider_div.find('i').text
+        gender = self.get_gender_by_name(provider_name)
+
+        provider_type = get_provider_type(tag_provider_div)  # 屋主...
+
+        dict_attr = dict(型態='', 現況='')
+        tag_detail = parser_data.find('div', attrs={'class': ['detailInfo clearfix'], })
+        get_detail(tag_detail, dict_attr)
+        house_type, state = dict_attr['型態'], dict_attr['現況']
+
+        return [provider_name, gender, provider_type, house_type, state, phone_img_url, url]
+
+    def run(self, url_list: list, max_threads: int = 20) -> None:
+        loop = asyncio.get_event_loop()
+        url_list = self.get_works_url_list(url_list)
+        loop.run_until_complete(self._main(url_list, max_threads))
+
+    async def write(self, lists: list, sep='\t') -> bool:
+        try:
+            self.log(sep.join(lists))
+            return True
+        except WriteDataFailed as e:
+            highlight_print(str(e))
+            return False
+
+    @classmethod
+    def batch_get_projects_info(cls, input_dict: dict) -> None:
+        """
+
+        :param input_dict:  see config.yaml.RentHouse591Info
+        :return:
+        """
+
+        work_dir, output_file = Path(input_dict['work_dir']), Path(input_dict['output_file'])
+        n_cpu, timeout = input_dict.get('n_cpu', cpu_count()), input_dict.get('timeout', 30)
+        max_threads: int = input_dict.get('max_threads', 20)
+        if n_cpu == -1:
+            n_cpu = cpu_count()
+        if not work_dir.exists():
+            raise FileNotFoundError(str(work_dir.resolve()))
+
+        for cur_url_file in [url_file for url_file in work_dir.glob('*.csv') if url_file.is_file()]:
+            csv_file = CSVFile(cur_url_file.resolve(),
+                               usecols=range(len(RentHouse591URL.CSV_TITLE)))  # ignore the row data, it columns are not matched with title
+            all_url_series = csv_file.df.URL
+            max_length = len(all_url_series)
+            pool, step = get_pool(n_cpu, work_list_size=max_length)
+            t_s = time()
+            for spider_url_list in [all_url_series[i: min((i + step), max_length)] for i in range(0, max_length, step)]:
+                pool.apply_async(create_spider_and_run, args=(cls, output_file, spider_url_list), kwds={'max_threads': max_threads, 'timeout': timeout})
+            pool.close()
+            pool.join()
+            highlight_print(f'{((time() - t_s) / 60):<8.2f} min')
+        startfile(work_dir)
 
 
 def main(config):
-    dict_run = {0: lambda: RentHouse591URL(Path('temp.temp')).start(config['RentHouse591URL']['city_name_list'])}
+    dict_run = {0: lambda: RentHouse591URL(Path('temp.temp')).start(config['RentHouse591URL']['city_name_list']),
+                1: lambda: RentHouse591Info.batch_get_projects_info(config['RentHouse591Info']),
+                }
 
     func = dict_run.get(config['Action'])
     if func:
