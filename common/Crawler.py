@@ -145,7 +145,7 @@ class SeleniumRunner(abc.ABC):
         chrome_driver_exe_path = Path(executable).parent.joinpath('Scripts/chromedriver.exe').resolve()
         assert chrome_driver_exe_path.exists(), 'chromedriver.exe not found!'
         web = webdriver.Chrome(executable_path=str(chrome_driver_exe_path), options=chrome_options)
-        web.set_window_position(-9999, 0) if background_mode else None
+        web.set_window_position(-9999, 0) if not background_mode else None
         web.implicitly_wait(3)  # global setting ``maximum wait time``
         web.get(str(url))
         return web

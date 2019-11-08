@@ -227,9 +227,47 @@ class RentHouse591Info(SpiderBase):
         startfile(output_file.parent)
 
 
+def download_image(input_dict: dict):
+    import requests
+
+    output_dir: Path = Path(input_dict['output_dir'])
+    url_file_path: Path = Path(input_dict['url_file_path'])
+    url_column_name = input_dict['url_column_name']
+    options = input_dict['options']
+
+    output_ext_name = options.get('ext_name', '')
+    if output_ext_name.find('.') == -1:
+        output_ext_name = '.' + output_ext_name
+
+    async def download_file(url: URL, out_file: Path, headers=None, **opt):
+        chunk_size = opt.get('chunk_size', 4096)  # default 4KB
+        max_size = 1024 ** 2 * options.get('max_size', -1)  # MB, default will ignore.
+        response = requests.get(url, headers=headers, timeout=opt.get('timeout'))
+        if response.status_code != 200:
+            raise requests.ConnectionError(f'{response.status_code}')
+
+        with open(str(out_file.resolve()), mode='wb') as out_f:
+            cur_size = 0
+            for chunk in response.iter_content(chunk_size=chunk_size):
+                cur_size += chunk_size
+                if 0 < max_size < cur_size:
+                    return
+                out_f.write(chunk)
+
+    df = pd.read_csv(url_file_path, engine='python', sep=options.get('sep', ','))
+    loop = asyncio.get_event_loop()
+    list_task = [asyncio.ensure_future(
+        download_file('http:' + url if url[0:5] != 'http:' else url, Path(f'{output_dir}/{idx}{output_ext_name}'),
+                      headers=options.get('headers'),
+                      max_size=options.get('max_size'))
+    ) for idx, url in enumerate(df[url_column_name])]
+    loop.run_until_complete(asyncio.wait(list_task))
+
+
 def main(config):
     dict_run = {0: lambda: RentHouse591URL(Path('temp.temp')).start(config['RentHouse591URL']['city_name_list']),
                 1: lambda: RentHouse591Info.batch_get_projects_info(config['RentHouse591Info']),
+                3: lambda: download_image(config['download_image'])
                 }
 
     func = dict_run.get(config['Action'])
