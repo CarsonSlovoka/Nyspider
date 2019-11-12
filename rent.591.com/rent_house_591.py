@@ -6,10 +6,12 @@ prepared:
 USAGE::
 
 """
-from os import startfile, cpu_count
+from io import StringIO, BytesIO
+from os import startfile, cpu_count, environ
 from pathlib import Path
 from time import sleep
 
+import requests
 from bs4 import BeautifulSoup, SoupStrainer, Tag
 
 from selenium import webdriver
@@ -30,7 +32,65 @@ import asyncio
 import re
 import traceback
 
+from multiprocessing import Lock
+
+from keras.layers.convolutional import Conv2D, MaxPooling2D
+from keras.layers.core import Flatten, Dense, Dropout
+from keras.models import Sequential
+
+import imageio
+import cv2
+import numpy as np
+
+
 BACKGROUND_MODE = True
+T_IO = TypeVar('T_IO', StringIO, BytesIO)
+
+environ["TF_CPP_MIN_LOG_LEVEL"] = '3'  # show only Error
+
+
+def get_letter_image_regions(img) -> list:
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    thresh_gray = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)[1]
+
+    contours, hierarchy = cv2.findContours(thresh_gray, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    all_area_set = set()
+    for c in contours:
+        x, y, w, h = cv2.boundingRect(c)
+        all_area_set.add((x, y, w, h))
+    letter_image_regions = sorted(all_area_set, key=lambda e: e[0])
+    return letter_image_regions
+
+
+async def download_and_keep_on_memory(url: URL, headers=None, timeout=None, **option) -> T_IO:
+    if headers is None:
+        headers = {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3',
+            'Accept-Encoding': 'gzip, deflate',
+            'Accept-Language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Cache-Control': 'max-age=0',
+            'Connection': 'keep-alive',
+            'Host': 'statics.591.com.tw',
+            'Upgrade-Insecure-Requests': '1',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.87 Safari/537.36'
+        }
+    chunk_size = option.get('chunk_size', 4096)  # default 4KB
+    max_size = 1024 ** 2 * option.get('max_size', -1)  # MB, default will ignore.
+    response = requests.get(url, headers=headers, timeout=timeout)
+    if response.status_code != 200:
+        raise requests.ConnectionError(f'{response.status_code}')
+
+    instance_io = StringIO if isinstance(next(response.iter_content(chunk_size=1)), str) else BytesIO
+    io_obj = instance_io()
+    cur_size = 0
+    for chunk in response.iter_content(chunk_size=chunk_size):
+        cur_size += chunk_size
+        if 0 < max_size < cur_size:
+            break
+        io_obj.write(chunk)
+    io_obj.seek(0)
+    return io_obj
 
 
 class RentHouse591URL(SeleniumRunner):
@@ -97,7 +157,7 @@ class RentHouse591URL(SeleniumRunner):
 
 
 class RentHouse591Info(SpiderBase):
-    __slots__ = ['_url', ]
+    __slots__ = ['_model', ]
 
     OUT_DIR = 'output/url_data'
 
@@ -110,6 +170,27 @@ class RentHouse591Info(SpiderBase):
                      URL='URL',
                      )
 
+    def __init__(self, log_path: Path, lock_log: Lock = None, timeout: int = None):
+        super().__init__(log_path, lock_log, timeout)
+
+        # build_model
+        model = Sequential()
+        model.add(Conv2D(20, (5, 5), padding="same", input_shape=(30, 30, 1), activation="relu"))
+        model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
+        model.add(Conv2D(50, (5, 5), padding="same", activation="relu"))
+        model.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
+        model.add(Flatten())
+        model.add(Dense(128, activation="relu"))
+        model.add(Dropout(0.3))
+        model.add(Dense(11, activation="softmax"))
+        model.compile(loss="categorical_crossentropy", optimizer="adam", metrics=["accuracy"])
+        model.load_weights('rent_591_phone_captcha.h5')
+        self._model = model
+
+    @property
+    def model(self):
+        return self._model
+
     def get_works_url_list(self, url_list: list) -> list:
         return [('https:' + url).replace(' ', '') for url in url_list]
 
@@ -119,15 +200,40 @@ class RentHouse591Info(SpiderBase):
         return '男' if _name in ('先生', '男士', '帥哥') else \
             '女' if _name in ('小姐', '女士', '美女', '太太') else name  # 'get it from the picture with machine learning'
 
-    def parser_html(self, url: URL, html_text: str):
+    async def parser_html(self, url: URL, html_text: str):
 
-        def get_phone_data(tag_phone_span: Tag) -> str:
-            if len(tag_num_span.text) > 9:
+        async def get_phone_data(tag_phone_span: Tag) -> str:
+            if len(tag_num_span.text) > 9:  # phone number is test
                 return [' '.join(e) for e in [re.findall('\\b\\S*\\b', tag_phone_span.text)] if e != ''][0]
 
             phone_img = tag_phone_span.find('img')
-            # machine_learning.predict(download_img(phone_img_url))
-            return phone_img.attrs.get('src')
+            if phone_img is None:
+                highlight_print(f"can't get the phone number. url: {url} (maybe already sold out)")
+                return ""
+            img_url = phone_img.attrs.get('src')
+            io_img = await download_and_keep_on_memory('http:' + img_url if url[0:5] != 'http:' else img_url)
+            with io_img:
+                org_image = imageio.imread(io_img, as_gray=False, pilmode="RGB")
+                # cur_img = cv2.cvtColor(np.asarray(org_image), cv2.COLOR_RGB2GRAY)
+
+            list_letter_image_regions = get_letter_image_regions(org_image)
+
+            cur_result = []
+            for letter_bounding_box in list_letter_image_regions:
+                x, y, w, h = letter_bounding_box
+
+                # Extract the letter from the original image with a 1-pixel margin around the edge
+                cur_img = org_image[y - 1:y + h + 1, x - 1:x + w + 1]
+                cur_img = cv2.cvtColor(cur_img, cv2.COLOR_RGB2GRAY)
+                cur_img = cv2.resize(cur_img, (30, 30))  # (30, 30)
+                cur_img = cv2.threshold(cur_img, 200, 255, cv2.THRESH_BINARY)[1]
+                cur_img = np.expand_dims(cur_img, axis=2)  # (30, 30, 1)  # channels
+                cur_img = np.expand_dims(cur_img, axis=0)  # (1, 30, 30, 1)
+                predict_result = self.model.predict(np.array(cur_img, dtype=float) / 255)
+                label = np.argmax(predict_result, axis=1)[0]
+                label = '-' if label == 10 else str(label)
+                cur_result.append(label)
+            return ''.join(cur_result)
 
         def get_provider_type(t_provider_div: Tag):
             provider_type_text = t_provider_div.text
@@ -162,7 +268,7 @@ class RentHouse591Info(SpiderBase):
         if tag_num_span is None:
             highlight_print(f'error. empty phone number: url: {url} (maybe the page does not exists anymore.)')
             return []
-        phone_img_url = get_phone_data(tag_num_span)
+        phone_number = await get_phone_data(tag_num_span)
 
         # result_set_provider = parser_data.findAll('div', attrs={'class': ['infoOne clearfix'], })
         tag_avatar_right_div = parser_data.find('div', attrs={'class': ['avatarRight'], })
@@ -178,7 +284,7 @@ class RentHouse591Info(SpiderBase):
         get_detail(tag_detail, dict_attr)
         house_type, state = dict_attr['型態'], dict_attr['現況']
 
-        return [provider_name, gender, provider_type, house_type, state, phone_img_url, url]
+        return [provider_name, gender, provider_type, house_type, state, phone_number, url]
 
     def run(self, url_list: list, max_threads: int = 20) -> None:
         loop = asyncio.get_event_loop()
