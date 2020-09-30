@@ -1,0 +1,41 @@
+//補足表示・非表示
+$(function(){
+  $('.hosoku').css('display', 'none');
+  $('.slide_hosoku').on('click',function(){
+  $(this).next('.hosoku').slideToggle();
+  $(this).toggleClass("hosoku-active"); 
+  return false;
+  });
+  $('.slide_hosoku_other').on('click',function(){
+  $(this).next('.hosoku').slideToggle();
+  $(this).toggleClass("hosoku-active"); 
+  return false;
+  });
+});
+
+$(function(){
+  $('a[href^="#"]').click(function(){
+  var speed = 500;
+  var href= $(this).attr("href");
+  var target = $(href == "#" || href == "" ? 'html' : href);
+  var position = target.offset().top;
+  $("html, body").animate({scrollTop:position}, speed, "swing");
+  return false;
+  });
+});
+
+//コピー処理
+$(function(){
+  const clipboard = new ClipboardJS('.copy_btn');
+  const btns = document.querySelector('.copy_btn');
+  btns.addEventListener('mouseleave',clearTooltip);
+  
+  clipboard.on('success', function(e) {
+    $('.clipboard-success').fadeIn(10).fadeOut(3500);
+  });
+});
+
+function clearTooltip(e){
+    e.currentTarget.setAttribute('class','copy_btn');
+}
+/* コピーが成功した時の処理 */

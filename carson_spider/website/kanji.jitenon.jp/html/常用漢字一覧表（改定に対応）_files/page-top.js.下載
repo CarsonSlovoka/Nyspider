@@ -1,0 +1,48 @@
+// JavaScript Document
+$(function() {
+  var pagetop = $('.page_top');
+	var searchtop = $('.toggle_switch2');
+	var footer = $('footer');
+	var beforesclolltop = 0;
+
+  $(window).scroll(function () {
+
+    if($('#geniee_overlay_outer').length){
+      var overlapcover = $('#geniee_overlay_outer').offset().top;	
+      pagetop.css("bottom", ($('#geniee_overlay_outer').height()+70) + 'px');
+      searchtop.css("bottom", ($('#geniee_overlay_outer').height()+17) + 'px');
+			footer.css("padding-bottom", ($('#geniee_overlay_outer').height()+7) + 'px');
+    } else {
+      pagetop.css("bottom", '70px');
+      searchtop.css("bottom", '10px');
+			footer.css("padding-bottom", '');
+    }
+    //fadein out
+      if ($(this).scrollTop() > 500 && beforesclolltop > $(this).scrollTop()) {
+        pagetop.fadeIn();
+        searchtop.fadeIn();
+      } else {
+        pagetop.fadeOut();
+        searchtop.fadeOut();
+      }	
+      beforesclolltop = $(this).scrollTop();
+    });
+
+    //pagetop
+    pagetop.click(function () {
+      $('body, html').animate({ scrollTop: 0 }, 500);
+      return false;			
+    });
+
+		//keyboard
+		document.addEventListener("DOMFocusIn", function(event) {
+			var overlapcover = $('#geniee_overlay_outer');
+			//キーボードが出現した時
+			overlapcover.css("display", 'none');
+		}, false);
+		document.addEventListener("DOMFocusOut", function(event) {
+			//キーボードが引っ込んだ時
+			var overlapcover = $('#geniee_overlay_outer');
+			overlapcover.css("display", 'block');
+		}, false);
+});

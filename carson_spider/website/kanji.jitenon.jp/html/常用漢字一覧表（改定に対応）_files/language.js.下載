@@ -1,0 +1,14 @@
+//言語スライドメニュー
+$(function() {
+  $('#slide1').click(function(){
+		  if ($('#target1').css('display') == 'none') {
+				  $('#target1').slideDown('fast');
+				  $('#slide1 th').addClass('close');
+				  $('#slide1 th').removeClass('open');
+		  } else {
+				  $('#target1').slideUp('fast');
+				  $('#slide1 th').removeClass('close');
+				  $('#slide1 th').addClass('open');
+		  }
+  });
+});
