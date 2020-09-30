@@ -2,8 +2,13 @@
 
 import requests
 import os
+import sys
 import sqlite3
-import xlwt3
+try:
+    import xlwt3
+except ImportError:
+    ...
+from api import *
 from email import encoders
 from email.header import Header
 from email.mime.text import MIMEText
