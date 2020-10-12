@@ -10,9 +10,9 @@ class LogMixin:
     _log: logging.Logger
 
     @staticmethod
-    def new_logger(logger_name: str, output_path: Path):
+    def new_logger(logger_name: str, output_path: Path, **options):
         log = logging.Logger(logger_name)
-        file_handler = logging.FileHandler(output_path, mode='w', encoding='utf-8')
+        file_handler = logging.FileHandler(output_path, mode=options.get('mode', 'w'), encoding='utf-8')
         file_handler.setFormatter(logging.Formatter(u'%(message)s'))
         log.addHandler(file_handler)
         return log

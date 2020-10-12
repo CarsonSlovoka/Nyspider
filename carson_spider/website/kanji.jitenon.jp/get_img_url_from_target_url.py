@@ -132,7 +132,7 @@ class Kanji(SpiderBase, LogMixin):  # https://kanji.jitenon.jp/cat/joyo.html
                     print(traceback.format_exc())
                     print(str(e))
 
-        async def async_write(list_data: list):
+        async def async_write(list_data: List[Tuple]):
             async with aiofiles.open(self.output_path, 'a', encoding='utf-8') as f:
                 for data in list_data:
                     # name, url_img, utf16be_str = data
