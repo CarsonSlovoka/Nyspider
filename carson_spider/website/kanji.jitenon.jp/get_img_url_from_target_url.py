@@ -47,14 +47,27 @@ class Kanji(SpiderBase, LogMixin):  # https://kanji.jitenon.jp/cat/joyo.html
             self.log(url_data)
 
     def spider(self, query_url: str) -> List[Tuple[str, str, str]]:
-        list_data = []
         server_response = requests.get(query_url, headers=self.headers)
         if server_response.status_code != 200:
             sys.stderr.write(f'error to connect:{query_url}')
             return []
 
+        return self.spider_base(server_response.text)
+
+    async def async_spider(self, query_url: str) -> List[Tuple[str, str, str]]:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(query_url, timeout=10, headers=self.headers) as server_response:
+                if server_response.status != 200:
+                    sys.stderr.write(f'error to connect:{query_url}')
+                    return []
+
+                html_bytes: bytes = await server_response.read()
+                html_text: str = html_bytes.decode('utf-8')
+                return self.spider_base(html_text)
+
+    def spider_base(self, html_text: str) -> List[Tuple[str, str, str]]:
         filter_data = SoupStrainer('div', attrs={'class': ['kanji_main ChangeElem_Panel', 'normal_box']})
-        bs = BeautifulSoup(server_response.text, 'lxml', parse_only=filter_data)
+        bs = BeautifulSoup(html_text, 'lxml', parse_only=filter_data)
         if bs is None:
             return []
 
@@ -67,44 +80,13 @@ class Kanji(SpiderBase, LogMixin):  # https://kanji.jitenon.jp/cat/joyo.html
             str_utf16be = '????'
 
         set_a: ResultSet = bs.findAll('a', attrs={'data-lightbox': ['bigimg']})
+        list_data = []
         for tag_a in set_a:
             url_img = tag_a.attrs['href']  # '../shotai3/001.gif'
             url_img = self.URL_ROOT + url_img[2:]
             name = tag_a.attrs['data-title']
             list_data.append((name, url_img, str_utf16be))
         return list_data
-
-    async def async_spider(self, query_url: str) -> List[Tuple[str, str, str]]:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(query_url, timeout=10, headers=self.headers) as server_response:
-                if server_response.status != 200:
-                    sys.stderr.write(f'error to connect:{query_url}')
-                    return []
-
-                html_bytes: bytes = await server_response.read()
-                html_text: str = html_bytes.decode('utf-8')
-
-                filter_data = SoupStrainer('div', attrs={'class': ['kanji_main ChangeElem_Panel', 'normal_box']})
-                bs = BeautifulSoup(html_text, 'lxml', parse_only=filter_data)
-                if bs is None:
-                    return []
-
-                list_data = []
-                try:
-                    tag_box: Tag = bs.find('div', attrs={'class': ['normal_box']})
-                    tag_dl: Tag = tag_box.find('dl')
-                    tag_dd: Tag = tag_dl.find('dd')
-                    str_utf16be = tag_dd.text[2:]  # U+4E00 -> 4E00
-                except:
-                    str_utf16be = '????'
-
-                set_a: ResultSet = bs.findAll('a', attrs={'data-lightbox': ['bigimg']})
-                for tag_a in set_a:
-                    url_img = tag_a.attrs['href']  # '../shotai3/001.gif'
-                    url_img = self.URL_ROOT + url_img[2:]
-                    name = tag_a.attrs['data-title']
-                    list_data.append((name, url_img, str_utf16be))
-                return list_data
 
     def run_old(self):
         for idx, query_url in enumerate(self.work_list()):

@@ -49,16 +49,16 @@ class Kanji(SpiderBase, LogMixin):  # https://kanji.jitenon.jp/cat/joyo.html
         need_write_title = False if self.output_path.exists() else True
         self._log = self.new_logger(self.__class__.__name__, output_path=output_path, mode='a')
         if need_write_title:
-            self.log(['name', 'url_img', 'utf16be_str', 'successful'])  # write title
+            self.log(['name', 'url_img', 'utf16be_str'])  # write title
         self.target_file_path = target_file_path
 
     def work_list(self) -> Iterator[Tuple[str, str, str]]:
-        df = pd.read_csv(self.output_path, usecols=['url_img', 'successful'], sep=self.SEP)
+        df = pd.read_csv(self.output_path, usecols=['url_img'], sep=self.SEP)
         with open(self.target_file_path, 'r', encoding='utf-8') as f:
             f.readline()  # skip title line
             for line in f:
                 output_folder_name, img_url, utf16be_str, *_ = line.split(self.SEP)
-                if img_url in df.url_img.tolist() and any(df.successful[df.url_img == img_url].tolist()):
+                if img_url in df.url_img.tolist():
                     # We have been downloaded before.
                     print(f'We have been downloaded before. {img_url:<66}')
                     continue
@@ -103,21 +103,22 @@ class Kanji(SpiderBase, LogMixin):  # https://kanji.jitenon.jp/cat/joyo.html
                 data_list: list = await q_data.get()
                 output_folder_name, img_url, utf16be_str, img_bytes = data_list
 
-                is_successful = True if len(img_bytes) > 0 else False
-                if is_successful:
-                    output_dir = Path('./output/image') / Path(output_folder_name)
-                    if not output_dir.exists():
-                        output_dir.mkdir(parents=True, exist_ok=True)
-                    output_image_file = output_dir / Path(utf16be_str.strip() + Path(img_url).suffix)
+                if len(img_bytes) == 0:
+                    # Now, we can know it's successful for every data that has been written.
+                    continue
 
-                    async with aiofiles.open(output_image_file, 'wb') as f:
-                        await f.write(img_bytes)
+                output_dir = Path('./output/image') / Path(output_folder_name)
+                if not output_dir.exists():
+                    output_dir.mkdir(parents=True, exist_ok=True)
+                output_image_file = output_dir / Path(utf16be_str.strip() + Path(img_url).suffix)
+
+                async with aiofiles.open(output_image_file, 'wb') as f:
+                    await f.write(img_bytes)
 
                 n_data_get += 1
                 print(f'{"get the data":30} {n_data_get:<10}')
                 try:
                     data_list = data_list[:-1]
-                    data_list.append(is_successful)
                     await async_write(data_list)
                 except Exception as e:
                     print(traceback.format_exc())
@@ -153,7 +154,7 @@ class Kanji(SpiderBase, LogMixin):  # https://kanji.jitenon.jp/cat/joyo.html
                     html_bytes: bytes = await server_response.read()
                     # html_text: str = html_bytes.decode('utf-8')
                     return html_bytes
-            except asyncio.TimeoutError as e:  # TimeoutError
+            except Exception as e:  # TimeoutError
                 sys.stderr.write(f'error to connect {e!r}: {img_url}')
                 return b''
 
