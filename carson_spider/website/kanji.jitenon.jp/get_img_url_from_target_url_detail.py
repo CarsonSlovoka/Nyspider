@@ -6,7 +6,7 @@ import requests
 from carson_spider.api.utils import LogMixin
 from carson_spider.api.spider import SpiderBase
 
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Iterator
 from pathlib import Path
 import traceback
 import sys
@@ -46,8 +46,12 @@ class Kanji(SpiderBase, LogMixin):  # https://kanji.jitenon.jp/cat/joyo.html
                       '明朝体', '教科書体', '教科書体（筆順）'])  # write title
         self.target_file_path = target_file_path
 
-    def work_list(self):
-        df = pd.read_csv(self.output_path, usecols=['URL'], sep=self.SEP)
+    def work_list(self) -> Iterator[str]:
+        try:
+            df = pd.read_csv(self.output_path, usecols=['URL'], sep=self.SEP)
+        except ValueError as e:
+            sys.stderr.write(f'Error. read file:{self.output_path}:\n {e}')
+            return
         with open(self.target_file_path, 'r', encoding='utf-8') as f:
             f.readline()  # skip title line
             for line in f:
@@ -106,7 +110,8 @@ class Kanji(SpiderBase, LogMixin):  # https://kanji.jitenon.jp/cat/joyo.html
             if 'Unicode' in dict_normal_box:
                 dict_normal_box['Unicode'] = dict_normal_box['Unicode'][2:]  # U+4E00 -> 4E00
         except:
-            ...
+            print(traceback.format_exc())
+            raise RuntimeError
 
         dict_info = {'部首': '', '画数': '', '種別': ''}
         tag_right: Tag = bs.find('div', attrs={'class': ['kanji_right']})
@@ -121,7 +126,8 @@ class Kanji(SpiderBase, LogMixin):  # https://kanji.jitenon.jp/cat/joyo.html
                     value_list.append(a.text)
                 dict_info[name] = sep.join(value_list)
         except:
-            ...
+            print(traceback.format_exc())
+            raise RuntimeError
 
         dict_info2 = {'音読み': '', '訓読み': '', '意味': ''}
         try:
@@ -131,15 +137,21 @@ class Kanji(SpiderBase, LogMixin):  # https://kanji.jitenon.jp/cat/joyo.html
                 tag_th: Tag = tr.find('th')
                 if tag_th:
                     val_list = []
-                    max_idx = int(tag_th.attrs['rowspan']) + cur_idx
                     name = tag_th.text
                     val_list.append(tr.find('td').find('a').text if name != '意味' else tr.find('td').text)
-                    for idx in range(cur_idx + 1, max_idx):
-                        tr: Tag = set_tr[idx]
-                        val_list.append(tr.find('td').find('a').text if name != '意味' else tr.find('td').text)
-                    dict_info2[name] = sep.join(val_list)
+
+                    if tag_th.attrs.get('rowspan'):
+                        max_idx = int(tag_th.attrs['rowspan']) + cur_idx
+                        for idx in range(cur_idx + 1, max_idx):
+                            tr: Tag = set_tr[idx]
+                            val_list.append(tr.find('td').find('a').text if name != '意味' else tr.find('td').text)
+
+                    dict_info2[name] = sep.join(
+                        [_.replace(self.SEP, '    ') if self.SEP in _ else _ for _ in val_list]
+                    )
         except:
-            ...
+            print(traceback.format_exc())
+            raise RuntimeError
 
         set_a: ResultSet = bs.findAll('a', attrs={'data-lightbox': ['bigimg']})
         dict_img_info = {'img_info': dict()}
@@ -167,9 +179,9 @@ class Kanji(SpiderBase, LogMixin):  # https://kanji.jitenon.jp/cat/joyo.html
                         q_data.put_nowait(dict_data)
                 except Exception as e:
                     # print(traceback.format_exc())
-                    # print(str(e))
-                    ...
-
+                    from console_color import cprint, RGB
+                    # Cannot connect to host kanji.jitenon.jp:443 ssl:default [getaddrinfo failed]
+                    cprint(str(e), RGB.RED, RGB.YELLOW)
 
         async def async_write(dict_data: Dict):
             if len(dict_data) == 0:
