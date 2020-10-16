@@ -12,7 +12,10 @@ class SpiderBase:
             'Accept-Language': 'en-US,en;q=0.5',
             'Accept-Encoding': 'gzip, deflate',
             'DNT': "1",
-            'Connection': 'keep-alive'}
+            'Connection': 'keep-alive',
+            'content_type': 'text/html',
+            # 'delay': '0',  # Some responses will have zero delay, and some will have maximum of 3 seconds delay.
+        }
 
     def run(self):
         raise NotImplementedError

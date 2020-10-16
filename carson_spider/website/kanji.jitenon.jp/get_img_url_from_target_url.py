@@ -156,7 +156,11 @@ class Kanji(SpiderBase, LogMixin):  # https://kanji.jitenon.jp/cat/joyo.html
         task_writer: Task = loop.create_task(data_center(list_task_parser, queue_data))
         task_list: List = [task_url, task_writer]
         task_list.extend(list_task_parser)
-        loop.run_until_complete(asyncio.wait(task_list))
+        try:
+            loop.run_until_complete(asyncio.wait(task_list))
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
 
 
 def main():

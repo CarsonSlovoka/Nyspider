@@ -18,6 +18,7 @@ import aiofiles
 
 import numpy as np
 import pandas as pd
+import numpy as np
 
 
 class Kanji(SpiderBase, LogMixin):  # https://kanji.jitenon.jp/cat/joyo.html
@@ -80,7 +81,12 @@ class Kanji(SpiderBase, LogMixin):  # https://kanji.jitenon.jp/cat/joyo.html
     async def async_spider(self, query_url: str) -> Dict:
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(query_url, timeout=10, headers=self.headers) as server_response:
+                dict_delay = {'delay': str(np.random.choice(
+                    [0, 1, 2, 3], size=1,
+                    p=[0.1, 0.25, 0.25, 0.4]
+                )[0])}  # Some responses will have zero delay, and some will have maximum of 3 seconds delay.
+                header = {**self.headers, **dict_delay}
+                async with session.get(query_url, timeout=10, headers=header) as server_response:
                     if server_response.status != 200:
                         sys.stderr.write(f'error to connect:{query_url}')
                         return {}
@@ -233,7 +239,11 @@ class Kanji(SpiderBase, LogMixin):  # https://kanji.jitenon.jp/cat/joyo.html
         task_writer: Task = loop.create_task(data_center(list_task_parser, queue_data))
         task_list: List = [task_url, task_writer]
         task_list.extend(list_task_parser)
-        loop.run_until_complete(asyncio.wait(task_list))
+        try:  # = asyncio.run(task_list)
+            loop.run_until_complete(asyncio.wait(task_list))
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
 
 
 def main():
