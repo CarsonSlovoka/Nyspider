@@ -1,0 +1,95 @@
+//検索スライドメニュー
+/**$(function(){
+  $('.select_search').click(function(){
+		  if ($('#target2').css('display') == 'none') {
+				  $('#target2').slideDown('fast');
+				  $('#select_search th').addClass('close');
+				  $('#select_search th').removeClass('open');
+		  } else {
+				  $('#target2').slideUp('fast');
+				  $('#select_search th').removeClass('close');
+				  $('#select_search th').addClass('open');
+		  }
+  });
+});**/
+
+//検索スライドメニュー
+$(function(){
+  $('.select_search').click(function(){
+		  if ($(this).parent().parent().find('.search_target').css('display') == 'none') {
+				  $(this).parent().parent().find('.search_target').slideDown('fast');
+		  } else {
+				  $(this).parent().parent().find('.search_target').slideUp('fast');
+		  }
+  });
+});
+
+$(function(){
+	// Ajax button click
+	$('.search_form').submit(function(){
+		$.ajax({
+			url:'https://kanji.jitenon.jp/include/page_send.php',
+			type:'POST',
+			data:{
+				'value':$(this).parent().find('.value').val(),
+				'how':$(this).parent().find('.how').val()
+			}
+		})
+		// Ajaxリクエストが成功した時発動
+		.done(function(data){
+		window.location.href = data;
+			//console.log(data);
+		})
+		// Ajaxリクエストが失敗した時発動
+		.fail(function(data){
+			console.log('error',data);
+		})
+		// Ajaxリクエストが成功・失敗どちらでも発動
+		.always(function(data){
+
+		});
+	});
+	return false;
+});
+		
+$(function(){
+    $('.search_other ul a').click(function(){
+	  //activeクラスの調整
+	  $(this).parents('ul').find('li a').removeClass('head-active');
+	  $(this).addClass('head-active');
+	  
+	  //検索の分類が変えられた場合
+	  if($(this).parents('ul').attr('id') == 'select01'){
+		$(this).parents('.search_target').parent().find('.how').val($(this).text());
+		$(this).parents('.search_target').parent().find('.select_search').text($(this).text());
+		
+		var this_id = $(this).attr('id');
+		if(this_id == 'sel11' || this_id == 'sel12'){
+	      $(this).parents('.search_target').find('#select02').show();
+		}else if(this_id == 'sel13' || this_id == 'sel14'){
+	      $(this).parents('.search_target').find('#select02').hide();
+		}
+	  }
+	  
+	  var value = $(this).parents('.search_target').parent().find('input[name=value]').val().replace(/\[/, '').replace(/\]/,'');
+	  var sel1_id = $(this).parents('.search_target').find('#select01').find('.head-active').attr('id');
+	  var sel2_id = $(this).parents('.search_target').find('#select02').find('.head-active').attr('id');
+      var ret_value;
+	  if(sel1_id == 'sel11' || sel1_id == 'sel12'){
+		if(sel2_id == 'sel21'){
+		  ret_value = value;
+		}else if(sel2_id == 'sel22'){
+		  ret_value = '['+ value +']';
+		}else if(sel2_id == 'sel23'){
+		  ret_value = '['+ value;
+		}else if(sel2_id == 'sel24'){
+		  ret_value = value +']';
+		}
+	  }else if(sel1_id == 'sel13' || sel1_id == 'sel14'){
+        ret_value = value;
+	  }
+	  $(this).parents('.search_target').parent().find('input[name=value]').val(ret_value);
+	  
+    return false;
+  });
+});

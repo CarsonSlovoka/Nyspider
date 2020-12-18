@@ -1,0 +1,15 @@
+$(function () {
+  //$('.ChangeElem_Panel').hide();
+  //$('.ChangeElem_Panel').eq(0).show();
+  //$('.ChangeElem_Btn').eq(0).addClass('is-active');
+  $('.ChangeElem_Btn').each(function () {
+    $(this).on('click', function () {
+			var parent = $(this).parents(".kanji_left");
+      var index = $(parent).find('.ChangeElem_Btn').index(this);
+      $(parent).find('.ChangeElem_Btn').removeClass('is-active');
+      $(this).addClass('is-active');
+      $(parent).find('.ChangeElem_Panel').hide();
+      $(parent).find('.ChangeElem_Panel').eq(index).show();
+    });
+  });
+});

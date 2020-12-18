@@ -1,0 +1,33 @@
+//アコーディオンメニュー
+$(function() {
+  $('.toggle_switch').on('click',function(){
+	$(this).toggleClass('open');
+	$(this).next('.toggle_contents').slideToggle();
+  });	
+  
+  //ページ下部の検索
+  $('.toggle_switch2').on('click',function(){
+	  $(this).toggleClass('open2');
+	  $(this).next('.toggle_contents2').slideToggle();
+	  var topPosition =  $('#all').position().top;
+	  if(topPosition < 87 && topPosition > 0)topPosition = 86;
+	 // $('.toggle_contents2 .header_search').css('padding-top',topPosition+'px');
+  });
+	$(window).on('scroll',function(){
+		if($('ins.adsbygoogle-noablate').length){
+			var max_size = 0;
+			$('ins.adsbygoogle-noablate').each(function(ind,elem){
+				if(max_size < $(elem).height() && $(elem).css('display') != 'none'){
+					max_size = $(elem).height();
+				}
+			});
+			if(max_size>0){
+			  $('.toggle_contents2 .header_search').css('padding-top',max_size+'px');
+              $('.toggle_contents2 .header_search2').css('padding-top',max_size+'px');
+			  //$('.anchor').css('position','relative');
+			  //$('.anchor').css('padding-top','100px');
+			  //$('.anchor').css('display','block');
+			}
+		}
+	});
+});
