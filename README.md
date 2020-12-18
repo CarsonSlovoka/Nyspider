@@ -1,3 +1,5 @@
+https://kanji.jitenon.jp --- 字的相關資訊 (carson_spider/website/kanji.jitenon.jp)
+
 https://rent.591.com.tw --- 591租屋網
 
 www.taaa.org.tw  --- 台北市廣告代理商業同業公會 
